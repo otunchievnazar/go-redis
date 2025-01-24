@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -8,16 +9,40 @@ import (
 	"os"
 )
 
-func getRoot(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got / request\n")
-	io.WriteString(w, "This is my website!\n")
+type SomeData struct {
+	Name string `json:"name"`
+	Age  int    `json:"age"`
 }
+
+func getRoot(w http.ResponseWriter, r *http.Request) {
+	som := setSomeData("Flora", 25)
+	fmt.Printf("DEBUG: som = %+v\n", som)
+
+	jsonData, err := json.Marshal(som)
+	if err != nil {
+		http.Error(w, "Failed to serialize data", http.StatusInternalServerError)
+		return
+	}
+	fmt.Printf("DEBUG: jsonData = %s\n", jsonData)
+	io.WriteString(w, string(jsonData))
+}
+
 func getHello(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got /hello request\n")
 	io.WriteString(w, "Hello, HTTP!\n")
 }
 
+func setSomeData(newName string, newAge int) *SomeData {
+	return &SomeData{
+		Name: newName,
+		Age:  newAge,
+	}
+}
+
 func main() {
+	som := setSomeData("Flora", 26)
+	fmt.Println(som)
+	fmt.Println(som.Name, som.Age)
 	http.HandleFunc("/", getRoot)
 	http.HandleFunc("/hello", getHello)
 
