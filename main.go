@@ -24,7 +24,7 @@ func getRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Printf("DEBUG: jsonData = %s\n", jsonData)
-	io.WriteString(w, string(jsonData))
+	w.Write(jsonData)
 }
 
 func getHello(w http.ResponseWriter, r *http.Request) {
