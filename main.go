@@ -1,56 +1,79 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
+	"log/slog"
+	"net"
 )
 
-type SomeData struct {
-	Name string `json:"name"`
-	Age  int    `json:"age"`
+type Server struct {
+	Conf
+	peer        map[*Peer]bool
+	ln          net.Listener
+	addPeerchan chan *Peer
+	quitchan    chan struct{}
+}
+type Conf struct {
+	AddrListen string
 }
 
-func getRoot(w http.ResponseWriter, r *http.Request) {
-	som := setSomeData("Flora", 25)
-	fmt.Printf("DEBUG: som = %+v\n", som)
+func ServerInit(cfg Conf) *Server {
+	if len(cfg.AddrListen) == 0 {
+		cfg.AddrListen = ":6969"
+	}
+	return &Server{
+		Conf:        cfg,
+		peer:        make(map[*Peer]bool),
+		addPeerchan: make(chan *Peer),
+		quitchan:    make(chan struct{}),
+	}
+}
 
-	jsonData, err := json.Marshal(som)
+func (s *Server) Listen() error {
+	ln, err := net.Listen("tcp", s.AddrListen)
 	if err != nil {
-		http.Error(w, "Failed to serialize data", http.StatusInternalServerError)
-		return
+		return err
 	}
-	fmt.Printf("DEBUG: jsonData = %s\n", jsonData)
-	w.Write(jsonData)
+	s.ln = ln
+
+	go s.peersLoop()
+
+	slog.Info("Listening for connections", "address", s.AddrListen)
+
+	return s.acceptConnections()
 }
 
-func getHello(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got /hello request\n")
-	io.WriteString(w, "Hello, HTTP!\n")
+func (s *Server) acceptConnections() error {
+	for {
+		conn, err := s.ln.Accept()
+		if err != nil {
+			slog.Error("Error accepting connection", "error", err)
+			continue
+		}
+		go s.handleConnection(conn)
+	}
 }
 
-func setSomeData(newName string, newAge int) *SomeData {
-	return &SomeData{
-		Name: newName,
-		Age:  newAge,
+func (s *Server) peersLoop() {
+	for {
+		select {
+
+		case <-s.quitchan:
+			return
+		case p := <-s.addPeerchan:
+			s.peer[p] = true
+		}
 	}
+}
+
+func (s *Server) handleConnection(conn net.Conn) {
+	peer := NewPeer(conn)
+	s.addPeerchan <- peer
+
+	peer.readLoop()
 }
 
 func main() {
-	som := setSomeData("Flora", 26)
-	fmt.Println(som)
-	fmt.Println(som.Name, som.Age)
-	http.HandleFunc("/", getRoot)
-	http.HandleFunc("/hello", getHello)
+	server := ServerInit(Conf{AddrListen: ":3333"})
 
-	err := http.ListenAndServe(":3333", nil)
-	if errors.Is(err, http.ErrServerClosed) {
-		fmt.Printf("server closed\n")
-	} else if err != nil {
-		fmt.Printf("error starting server: %s\n", err)
-		os.Exit(1)
-	}
+	server.Listen()
 }
