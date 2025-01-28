@@ -68,7 +68,7 @@ func (s *Server) peersLoop() {
 func (s *Server) handleConnection(conn net.Conn) {
 	peer := NewPeer(conn)
 	s.addPeerchan <- peer
-
+	slog.Info("New peer connection", "address", conn.RemoteAddr())
 	peer.readLoop()
 }
 
